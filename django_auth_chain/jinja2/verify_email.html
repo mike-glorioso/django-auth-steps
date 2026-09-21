@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Check Your Email | Glotronic{% endblock %}
+{% block content %}
+<section>
+  <h1>Check your email</h1>
+  <p>We sent an 8-character code to your email address. Enter it below. It expires in 10 minutes.</p>
+  <form method="post" novalidate>
+    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+    <div class="field">
+      <label for="id_code">Code</label>
+      {{ form.code }}
+      {% if form.code.errors %}<p class="error">{{ form.code.errors|join(", ") }}</p>{% endif %}
+    </div>
+    <button type="submit">Verify</button>
+  </form>
+</section>
+{% endblock %}
