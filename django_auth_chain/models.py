@@ -38,7 +38,7 @@ class UserAuthMethod(Model):
         return f"{self.user} - {self.code} (step {self.order})"
 
 
-class GroupAuthMethod(Model):
+class GroupDefaultAuthMethod(Model):
     group: ForeignKey[Group, Group] = ForeignKey(
         Group, on_delete=CASCADE, related_name="auth_methods"
     )

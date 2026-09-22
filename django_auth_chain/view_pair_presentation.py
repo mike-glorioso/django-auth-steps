@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 
-from django.views import View
+from .enroll_view import EnrollView
+from .verify_view import VerifyView
 
 
 @dataclass
 class ViewPairPresentation:
-    enroll_view: type[View]
-    verify_view: type[View]
+    enroll_view: EnrollView
+    verify_view: VerifyView

@@ -3,7 +3,7 @@ from abc import abstractmethod
 from .base_view import BaseView
 
 
-class VerifyView(BaseView):
+class EnrollView(BaseView):
     @abstractmethod
-    def verify(self) -> bool: ...
+    def enroll(self) -> bool: ...
 

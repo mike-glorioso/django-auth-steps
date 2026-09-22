@@ -1,97 +1,120 @@
-from collections.abc import Callable
-
-from django.contrib import messages
 from django.contrib.auth import (
     logout as auth_logout,
 )
-from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import (
-    AbstractUser,
-)
-from django.forms import Form
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, HttpResponseBase
 from django.shortcuts import redirect, render
 from django.utils.datastructures import MultiValueDict
 from django.views import View
 
-from .constants import DJANGO_AUTH_CHAIN_USER_HOME
+from .constants import DJANGO_AUTH_CHAIN
+from .enroll_view import EnrollView
 from .forms import (
     PassphraseEnrollForm,
     PassphraseVerifyForm,
 )
+from .router import Router
 from .verify_view import VerifyView
 from .view_pair_presentation import (
     ViewPairPresentation,
 )
 
 
-class EnrollView[FormT: Form](View):
-    form_class: Callable[[MultiValueDict[str, str] | None], FormT]
-    verify: Callable[[FormT], bool]
-    render: Callable[[HttpRequest, FormT], HttpResponse]
+class StubEnrollView(EnrollView):
+    def fill_form_from_none(self) -> None: ...
 
-    @login_required
-    def get(self, request: HttpRequest) -> HttpResponse:
-        user = request.user
-        if isinstance(user, AbstractUser):
-            return redirect(DJANGO_AUTH_CHAIN_USER_HOME)
+    def fill_form_from_request_data(self, data: MultiValueDict[str, str]) -> None: ...
 
-        if request.method == "POST":
-            form = self.form_class(request.POST)
-            if form.is_valid():
-                if self.verify(form):
-                    messages.success(request, "Passphrase authentication is now enabled.")
-                    return redirect(DJANGO_AUTH_CHAIN_USER_HOME)
-                form.add_error("passphrase_match", "Passphrases do not match.")
-        else:
-            form = self.form_class(None)
-
-        return self.render(request, form)
-
-
-class PassphraseEnrollView(EnrollView[PassphraseEnrollForm]):
-    @staticmethod
-    def passphrase_form_class(data: MultiValueDict[str, str]):
-        return PassphraseEnrollForm(data)
-
-    @staticmethod
-    def passphrase_verify(form: PassphraseEnrollForm):
+    def enroll(self) -> bool:
         return False
 
-    @staticmethod
-    def passphrase_render(request: HttpRequest, form: PassphraseEnrollForm):
-        return render(request, "passphrase_enroll.html", {"form": form})
+    def render_with_form(self, request: HttpRequest) -> HttpResponse:
+        raise NotImplementedError()
 
-    form_class: Callable[[MultiValueDict[str, str]], PassphraseEnrollForm] = passphrase_form_class
-    verify = passphrase_verify
-    render = passphrase_render
-
-
-class PassphraseVerifyView(VerifyView[PassphraseVerifyForm]):
-    @staticmethod
-    def passphrase_form_class(data: MultiValueDict[str, str] | None) -> PassphraseVerifyForm:
-        return PassphraseVerifyForm(data)
-
-    @staticmethod
-    def passphrase_verify(form: PassphraseVerifyForm):
+    def is_form_valid(self) -> bool:
         return False
 
-    @staticmethod
-    def passphrase_render(request: HttpRequest, form: PassphraseVerifyForm):
-        return render(request, "passphrase_verify.html", {"form": form})
+    def add_error(self, field_name: str, error_message:str) -> None: ...
 
-    form_class = passphrase_form_class
-    verify = passphrase_verify
-    render = passphrase_render
+    def post(self, request: HttpRequest) -> HttpResponseBase:
+        raise NotImplementedError()
+
+
+class StubVerifyView(VerifyView):
+    def fill_form_from_none(self) -> None: ...
+
+    def fill_form_from_request_data(self, data: MultiValueDict[str, str]) -> None: ...
+
+    def verify(self) -> bool:
+        return False
+
+    def render_with_form(self, request: HttpRequest) -> HttpResponse:
+        raise NotImplementedError()
+
+    def is_form_valid(self) -> bool:
+        return False
+
+    def add_error(self, field_name: str, error_message:str) -> None: ...
+
+    def post(self, request: HttpRequest) -> HttpResponseBase:
+        raise NotImplementedError()
+
+
+class PassphraseEnrollView(EnrollView):
+    def fill_form_from_none(self) -> None:
+        self._form = PassphraseEnrollForm(None)
+        self._router = Router()
+
+    def fill_form_from_request_data(self, data: MultiValueDict[str, str]) -> None:
+        self._form = PassphraseEnrollForm(data)
+
+    def enroll(self) -> bool:
+        return False
+
+    def render_with_form(self, request: HttpRequest) -> HttpResponse:
+        return render(request, "passphrase_enroll.html", {"form": self._form})
+
+    def is_form_valid(self) -> bool:
+        return True if self._form.is_valid() else False
+
+    def add_error(self, field_name: str, error_message:str) -> None:
+        self._form.add_error(field_name, error_message)
+
+    def post(self, request: HttpRequest) -> HttpResponseBase:
+        return self._router.route_try_next_method(request, self)
+
+
+class PassphraseVerifyView(VerifyView):
+    def __init__(self):
+        self._router = Router()
+
+    def fill_form_from_none(self) -> None:
+        self._form = PassphraseVerifyForm(None)
+
+    def fill_form_from_request_data(self, data: MultiValueDict[str, str]) -> None:
+        self._form = PassphraseVerifyForm(data)
+
+    def verify(self) -> bool:
+        return False
+
+    def render_with_form(self, request: HttpRequest) -> HttpResponse:
+        return render(request, "passphrase_verify.html", {"form": self._form})
+
+    def is_form_valid(self) -> bool:
+        return True if self._form.is_valid() else False
+
+    def add_error(self, field_name: str, error_message:str) -> None:
+        self._form.add_error(field_name, error_message)
+
+    def post(self, request: HttpRequest) -> HttpResponseBase:
+        return self._router.route_try_next_method(request, self)
 
 
 class LogoutView(View):
     def get(self, request: HttpRequest) -> HttpResponse:
         auth_logout(request)
-        return redirect(":home")
-
+        return redirect(f'{DJANGO_AUTH_CHAIN}:logout')
 
 passphrase_view_pair = ViewPairPresentation(
-    enroll_view=PassphraseEnrollView,
-    verify_view=PassphraseVerifyView,
+    enroll_view=PassphraseEnrollView(),
+    verify_view=PassphraseVerifyView(),
 )

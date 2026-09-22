@@ -1,5 +1,5 @@
 from django.apps import AppConfig
 
 
-class AccountsConfig(AppConfig):
-    name = "django.accounts"
+class DjangoAuthChainConfig(AppConfig):
+    name = "django_auth_chain"

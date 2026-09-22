@@ -1,7 +1,9 @@
 PENDING_VERIFICATION_USER_KEY = "pending_verification_user_key"
 PENDING_ENROLLMENT_USER_IDENTIFIER = "pending_enrollment_user_identifier"
-NEXT_VERIFICATION_METHOD_CODE = "next_verification_method_code"
+VERIFICATION_METHOD_CODE = "next-verification_method_code"
 VERIFIED_METHOD_CODES = "verified_merthod_codes"
+USER_SELECT_HTML = "user_select.html"
+FORM = "form"
 
 DJANGO_AUTH_CHAIN = "django_auth_chain"
 DJANGO_AUTH_CHAIN_USER_HOME = f"{DJANGO_AUTH_CHAIN}:user_home"
