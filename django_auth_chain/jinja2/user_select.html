@@ -3,15 +3,15 @@
 <head><title>Sign in</title></head>
 <body>
   <h1>Sign in</h1>
-  {% if form.non_field_errors() %}
-    <p class="error">{{ form.non_field_errors()|join(", ") }}</p>
+  {% if non_field_errors %}
+    <div class="error">{{ non_field_errors }}</div>
   {% endif %}
   <form method="post">
     {{ csrf_input }}
     <div class="field">
       <label for="id_user_identifier">Username</label>
       {{ form.user_identifier }}
-      {% if form.user_identifier.errors %}<p class="error">{{ form.user_identifier.errors|join(", ") }}</p>{% endif %}
+      {% if form.user_identifier.errors %}<div class="error">{{ form.user_identifier.errors }}</div>{% endif %}
     </div>
     <button type="submit">Continue</button>
   </form>

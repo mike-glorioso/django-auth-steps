@@ -1,9 +1,0 @@
-{% extends "base.html" %}
-{% block title %}Staff | Glotronic{% endblock %}
-{% block content %}
-<section>
-  <h1>Welcome, {{ request.user.username }}</h1>
-  <p><a href="/admin/">Go to admin</a></p>
-  <p><a href="{{ url('accounts:logout') }}">Log out</a></p>
-</section>
-{% endblock %}

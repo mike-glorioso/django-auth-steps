@@ -3,15 +3,15 @@
 <head><title>Enter your passphrase</title></head>
 <body>
   <h1>Enter your passphrase</h1>
-  {% if form.non_field_errors() %}
-    <p class="error">{{ form.non_field_errors()|join(", ") }}</p>
+  {% if non_field_errors %}
+    <div class="error">{{ non_field_errors }}</div>
   {% endif %}
   <form method="post">
     {{ csrf_input }}
     <div class="field">
       <label for="id_passphrase_verify">Passphrase</label>
       {{ form.passphrase_verify }}
-      {% if form.passphrase_verify.errors %}<p class="error">{{ form.passphrase_verify.errors|join(", ") }}</p>{% endif %}
+      {% if form.passphrase_verify.errors %}<div class="error">{{ form.passphrase_verify.errors }}</div>{% endif %}
     </div>
     <button type="submit">Verify</button>
   </form>
