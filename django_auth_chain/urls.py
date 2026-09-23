@@ -1,7 +1,7 @@
 from django.urls import path
 
-from .routing_enroll_view import RoutingEnrollView
-from .routing_verify_view import RoutingVerifyView
+from .strategies.routing_enroll_view import RoutingEnrollView
+from .strategies.routing_verify_view import RoutingVerifyView
 from .user_select_view import UserSelectView
 from .views import LogoutView, UserHomeView
 

@@ -5,12 +5,13 @@ from django.http import HttpRequest, HttpResponseBase
 from django.shortcuts import render
 from django.utils.datastructures import MultiValueDict
 
-from .errors import FormNotSetError
+from .errors import ExecutionStateNotSetError, FormNotSetError
 
 
 class BaseFormHandler(ABC):
     def __init__(self):
         self._form: Form | None = None
+        self._execution_state: bool | None = None
 
     def set_form(self, form: Form):
         self._form = form
@@ -35,9 +36,16 @@ class BaseFormHandler(ABC):
             raise FormNotSetError()
         return render(request, html, {"form": self._form})
 
+    def set_execution_state(self, succeeded: bool) -> None:
+        self._execution_state = succeeded
+
+    def execution_state(self) -> bool:
+        if self._execution_state is None:
+            raise ExecutionStateNotSetError()
+        return self._execution_state
+
     @abstractmethod
     def fill_form_from_none(self) -> None: ...
 
     @abstractmethod
     def fill_form_from_request_data(self, data: MultiValueDict[str, str]) -> None: ...
-

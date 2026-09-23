@@ -1,22 +1,38 @@
 from django.http import HttpRequest
 
 from .base_form_handler import BaseFormHandler
-from .enroller import Enroller
+from .form_handlers import PassphraseEnrollFormHandler, PassphraseVerifyFormHandler
+from .strategies.enroll_strategy import EnrollStrategy
+from .strategies.verify_strategy import VerifyStrategy
 from .utils import get_pending_verification_user
-from .verifier import Verifier
 
 
-class PassphraseEnroller(Enroller):
-    def enroll(self, request: HttpRequest, form_handler: BaseFormHandler) -> bool:
+class PassphraseEnrollStrategy(EnrollStrategy):
+    @property
+    def html(self) -> str:
+        return "passphrase_enroll.html"
+
+    def get_form_handler(self) -> BaseFormHandler:
+        return PassphraseEnrollFormHandler()
+
+    def execute(self, request: HttpRequest, form_handler: BaseFormHandler) -> None:
         raise NotImplementedError("Self-service passphrase enrollment isn't built yet.")
 
 
-class PassphraseVerifier(Verifier):
-    def verify(self, request: HttpRequest, form_handler: BaseFormHandler) -> bool:
+class PassphraseVerifyStrategy(VerifyStrategy):
+    @property
+    def html(self) -> str:
+        return "passphrase_verify.html"
+
+    def get_form_handler(self) -> BaseFormHandler:
+        return PassphraseVerifyFormHandler()
+
+    def execute(self, request: HttpRequest, form_handler: BaseFormHandler) -> None:
         form = form_handler.get_form()
         passphrase = form.cleaned_data["passphrase_verify"]
         user = get_pending_verification_user(request)
         if not user.check_password(passphrase):
             form_handler.add_error("passphrase_verify", "Incorrect passphrase.")
-            return False
-        return True
+            form_handler.set_execution_state(False)
+            return
+        form_handler.set_execution_state(True)

@@ -8,3 +8,7 @@ class FormNotSetError(Exception):
 
 class AuthMethodNotFoundError(Exception):
     pass
+
+
+class ExecutionStateNotSetError(Exception):
+    pass

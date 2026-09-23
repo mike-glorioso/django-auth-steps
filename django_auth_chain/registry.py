@@ -2,9 +2,9 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from django.contrib.auth.models import User
-from django.http import HttpRequest
 
-from .base_form_handler import BaseFormHandler
+from .strategies.enroll_strategy import EnrollStrategy
+from .strategies.verify_strategy import VerifyStrategy
 
 
 @dataclass
@@ -13,12 +13,8 @@ class AuthMethod:
     label: str
     permission: str | None
     is_enrolled: Callable[[User], bool]
-    get_enroll_form_handler: Callable[[], BaseFormHandler]
-    get_verify_form_handler: Callable[[], BaseFormHandler]
-    enroll: Callable[[HttpRequest, BaseFormHandler], bool]
-    verify: Callable[[HttpRequest, BaseFormHandler], bool]
-    enroll_html: str
-    verify_html: str
+    enroll_strategy: EnrollStrategy
+    verify_strategy: VerifyStrategy
 
 
 _methods: dict[str, AuthMethod] = {}

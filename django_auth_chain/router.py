@@ -52,9 +52,7 @@ def _highest_completed_order(request_user: User, verified_codes: list[str]) -> i
 
 def _current_method(request: HttpRequest) -> AuthMethod | None:
     """Derived, not stored: recomputed fresh from VERIFIED_METHOD_CODES
-    every call, so GET is naturally idempotent and there's no separate
-    'current step' pointer that can drift out of sync with what's
-    actually been completed."""
+    every call, so GET is naturally idempotent."""
     request_user = get_pending_verification_user(request)
     verified_codes = request.session.get(VERIFIED_METHOD_CODES, [])
     baseline = _highest_completed_order(request_user, verified_codes)
@@ -93,28 +91,22 @@ class Router:
         if current_method is None:
             return _finish(request, is_enrolling)
 
-        if is_enrolling:
-            form_handler = current_method.get_enroll_form_handler()
-            html = current_method.enroll_html
-        else:
-            form_handler = current_method.get_verify_form_handler()
-            html = current_method.verify_html
+        strategy = (
+            current_method.enroll_strategy if is_enrolling else current_method.verify_strategy
+        )
+        form_handler = strategy.get_form_handler()
 
         if request.method != "POST":
             form_handler.fill_form_from_none()
-            return form_handler.render_with_form(request, html)
+            return form_handler.render_with_form(request, strategy.html)
 
         form_handler.fill_form_from_request_data(request.POST)
         if not form_handler.is_form_valid():
-            return form_handler.render_with_form(request, html)
+            return form_handler.render_with_form(request, strategy.html)
 
-        succeeded = (
-            current_method.enroll(request, form_handler)
-            if is_enrolling
-            else current_method.verify(request, form_handler)
-        )
-        if not succeeded:
-            return form_handler.render_with_form(request, html)
+        strategy.execute(request, form_handler)
+        if not form_handler.execution_state():
+            return form_handler.render_with_form(request, strategy.html)
 
         verified_codes = request.session.get(VERIFIED_METHOD_CODES, [])
         verified_codes.append(current_method.code)

@@ -1,8 +1,8 @@
 from django.http import HttpRequest, HttpResponseBase
 from django.views import View
 
-from .redirect_if_authenticated import RedirectIfAuthenticatedMixin
-from .router import Router
+from ..redirect_if_authenticated import RedirectIfAuthenticatedMixin
+from ..router import Router
 
 
 class RoutingVerifyView(RedirectIfAuthenticatedMixin, View):

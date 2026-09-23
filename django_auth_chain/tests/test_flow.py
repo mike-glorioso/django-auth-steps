@@ -1,10 +1,38 @@
 from django.contrib.auth.models import User
+from django.http import HttpRequest
 from django.test import TestCase
 
+from django_auth_chain.base_form_handler import BaseFormHandler
 from django_auth_chain.constants import PENDING_VERIFICATION_USER_KEY
 from django_auth_chain.form_handlers import PassphraseVerifyFormHandler
 from django_auth_chain.models import UserAuthMethod
 from django_auth_chain.registry import AuthMethod, register
+from django_auth_chain.strategies.enroll_strategy import EnrollStrategy
+from django_auth_chain.strategies.verify_strategy import VerifyStrategy
+
+
+class _AlwaysSucceedsMixin:
+    """Test-only second step: reuses the passphrase form/template but
+    always succeeds, regardless of what's submitted - just exercises
+    chain sequencing, not any real verification logic."""
+
+    @property
+    def html(self) -> str:
+        return "passphrase_verify.html"
+
+    def get_form_handler(self) -> BaseFormHandler:
+        return PassphraseVerifyFormHandler()
+
+    def execute(self, request: HttpRequest, form_handler: BaseFormHandler) -> None:
+        form_handler.set_execution_state(True)
+
+
+class _AlwaysSucceedsEnrollStrategy(_AlwaysSucceedsMixin, EnrollStrategy):
+    pass
+
+
+class _AlwaysSucceedsVerifyStrategy(_AlwaysSucceedsMixin, VerifyStrategy):
+    pass
 
 
 class OneStepPassphraseFlowTests(TestCase):
@@ -63,12 +91,8 @@ class TwoStepFlowTests(TestCase):
                 label="Test second step",
                 permission=None,
                 is_enrolled=lambda user: True,
-                get_enroll_form_handler=PassphraseVerifyFormHandler,
-                get_verify_form_handler=PassphraseVerifyFormHandler,
-                enroll=lambda request, form_handler: True,
-                verify=lambda request, form_handler: True,
-                enroll_html="passphrase_verify.html",
-                verify_html="passphrase_verify.html",
+                enroll_strategy=_AlwaysSucceedsEnrollStrategy(),
+                verify_strategy=_AlwaysSucceedsVerifyStrategy(),
             )
         )
 
