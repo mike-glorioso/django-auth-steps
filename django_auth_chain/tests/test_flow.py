@@ -11,10 +11,28 @@ from django_auth_chain.strategies.enroll_strategy import EnrollStrategy
 from django_auth_chain.strategies.verify_strategy import VerifyStrategy
 
 
+class _AlwaysFailsMixin:
+    """Deny-by-default test double for a generic step. This is the
+    baseline for any test that doesn't specifically need the step to
+    pass - a double that silently succeeds by default risks tests
+    passing vacuously even when the real logic under test is broken.
+    Use _AlwaysSucceedsMixin below only where a test intentionally
+    needs a step to succeed."""
+
+    @property
+    def html(self) -> str:
+        return "passphrase_verify.html"
+
+    def get_form_handler(self) -> BaseFormHandler:
+        return PassphraseVerifyFormHandler()
+
+    def execute(self, request: HttpRequest, form_handler: BaseFormHandler) -> None:
+        form_handler.set_execution_state(False)
+
+
 class _AlwaysSucceedsMixin:
-    """Test-only second step: reuses the passphrase form/template but
-    always succeeds, regardless of what's submitted - just exercises
-    chain sequencing, not any real verification logic."""
+    """Deliberately, explicitly allowing - only for tests that need a
+    step to actually pass."""
 
     @property
     def html(self) -> str:
@@ -25,6 +43,14 @@ class _AlwaysSucceedsMixin:
 
     def execute(self, request: HttpRequest, form_handler: BaseFormHandler) -> None:
         form_handler.set_execution_state(True)
+
+
+class _AlwaysFailsEnrollStrategy(_AlwaysFailsMixin, EnrollStrategy):
+    pass
+
+
+class _AlwaysFailsVerifyStrategy(_AlwaysFailsMixin, VerifyStrategy):
+    pass
 
 
 class _AlwaysSucceedsEnrollStrategy(_AlwaysSucceedsMixin, EnrollStrategy):
@@ -80,15 +106,26 @@ class OneStepPassphraseFlowTests(TestCase):
 
 
 class TwoStepFlowTests(TestCase):
-    SECOND_STEP_CODE = "test-second-step"
+    DENY_SECOND_STEP_CODE = "test-second-step-deny"
+    ALLOW_SECOND_STEP_CODE = "test-second-step-allow"
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
         register(
             AuthMethod(
-                code=cls.SECOND_STEP_CODE,
-                label="Test second step",
+                code=cls.DENY_SECOND_STEP_CODE,
+                label="Test second step (deny)",
+                permission=None,
+                is_enrolled=lambda user: True,
+                enroll_strategy=_AlwaysFailsEnrollStrategy(),
+                verify_strategy=_AlwaysFailsVerifyStrategy(),
+            )
+        )
+        register(
+            AuthMethod(
+                code=cls.ALLOW_SECOND_STEP_CODE,
+                label="Test second step (allow)",
                 permission=None,
                 is_enrolled=lambda user: True,
                 enroll_strategy=_AlwaysSucceedsEnrollStrategy(),
@@ -99,9 +136,12 @@ class TwoStepFlowTests(TestCase):
     def setUp(self):
         self.user: User = User.objects.create_user(username="mike", password="correct-horse")
         UserAuthMethod.objects.create(user=self.user, code="passphrase", order=1)
-        UserAuthMethod.objects.create(user=self.user, code=self.SECOND_STEP_CODE, order=2)
 
     def test_first_step_alone_does_not_authenticate(self):
+        # deny by default here: this test never submits the second step,
+        # so whether it would pass or fail is irrelevant to what's checked
+        UserAuthMethod.objects.create(user=self.user, code=self.DENY_SECOND_STEP_CODE, order=2)
+
         self.client.post("/user-select/", {"user_identifier": "mike"})
         post_verify = self.client.post("/verify/", {"passphrase_verify": "correct-horse"})
         self.assertRedirects(post_verify, "/verify/")
@@ -112,6 +152,10 @@ class TwoStepFlowTests(TestCase):
         self.assertFalse(second_step.wsgi_request.user.is_authenticated)
 
     def test_both_steps_together_authenticate(self):
+        # intentionally allow here: this test's whole point is proving
+        # that completing every step authenticates the user
+        UserAuthMethod.objects.create(user=self.user, code=self.ALLOW_SECOND_STEP_CODE, order=2)
+
         self.client.post("/user-select/", {"user_identifier": "mike"})
         self.client.post("/verify/", {"passphrase_verify": "correct-horse"})
         self.client.post("/verify/", {"passphrase_verify": "irrelevant-for-this-step"})
@@ -119,3 +163,16 @@ class TwoStepFlowTests(TestCase):
         finish = self.client.get("/verify/", follow=True)
         self.assertRedirects(finish, "/")
         self.assertTrue(finish.wsgi_request.user.is_authenticated)
+
+    def test_second_step_failure_does_not_authenticate(self):
+        # the gap the old shared always-succeeds double couldn't catch:
+        # a later step failing must still block the chain, even after
+        # an earlier step genuinely succeeded
+        UserAuthMethod.objects.create(user=self.user, code=self.DENY_SECOND_STEP_CODE, order=2)
+
+        self.client.post("/user-select/", {"user_identifier": "mike"})
+        self.client.post("/verify/", {"passphrase_verify": "correct-horse"})
+
+        response = self.client.post("/verify/", {"passphrase_verify": "irrelevant-for-this-step"})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
