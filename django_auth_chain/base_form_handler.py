@@ -25,7 +25,7 @@ class BaseFormHandler(ABC):
             raise FormNotSetError()
         return True if self._form.is_valid() else False
 
-    def add_error(self, field_name: str, error_message: str) -> None:
+    def add_error(self, field_name: str | None, error_message: str) -> None:
         if self._form is None:
             raise FormNotSetError()
         self._form.add_error(field_name, error_message)

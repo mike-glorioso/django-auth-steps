@@ -1,80 +1,64 @@
-from django.contrib import messages
+from django.contrib.auth import login as auth_login
 from django.contrib.auth.models import User
 from django.http import HttpRequest, HttpResponseBase
 from django.shortcuts import redirect
 
-from .base_form_handler import BaseFormHandler
 from .constants import (
     DJANGO_AUTH_CHAIN_ENROLL,
     DJANGO_AUTH_CHAIN_USER_HOME,
     DJANGO_AUTH_CHAIN_USER_SELECT,
     DJANGO_AUTH_CHAIN_VERIFY,
-    PENDING_VERIFICATION_USER_KEY,
-    VERIFICATION_METHOD_CODE,
     VERIFIED_METHOD_CODES,
 )
-from .errors import (
-    AuthMethodNotFoundError,
-    UserNotFoundError,
-)
+from .errors import UserNotFoundError
 from .models import UserAuthMethod
 from .registry import AuthMethod
 from .registry import get as get_auth_method
+from .utils import clear_pending_user, get_pending_verification_user
 
 
-def _get_request_user(request: HttpRequest) -> User:
-    user_or_none = User.objects.filter(pk=request.session[PENDING_VERIFICATION_USER_KEY]).first()
-    if user_or_none is None:
-        raise UserNotFoundError()
-    return user_or_none
-
-
-def _cycle_to_next_method(request: HttpRequest, is_first_pass: bool) -> AuthMethod | None:
-    request_user = _get_request_user(request)
-    last_method_code = request.session[VERIFICATION_METHOD_CODE]
-    last_user_auth_method = UserAuthMethod.objects.filter(
+def _first_eligible_auth_method(request_user: User, after_order: int) -> AuthMethod | None:
+    """The first configured, registered, permission-eligible method with
+    order strictly greater than after_order. Doesn't touch the session -
+    callers decide what to do with the result."""
+    candidates = UserAuthMethod.objects.filter(
         user=request_user,
-        code=last_method_code,
-    ).first()
-    order = -1 if last_user_auth_method is None else last_user_auth_method.order
-    next_user_auth_method = UserAuthMethod.objects.filter(
-        user=request_user,
-        order__gt=order,
-    ).first()
-    if next_user_auth_method is None:
-        return None
+        enabled=True,
+        order__gt=after_order,
+    ).order_by("order")
 
-    next_auth_method = get_auth_method(next_user_auth_method.code)
-    if next_auth_method is None:
-        raise AuthMethodNotFoundError()
+    for candidate in candidates:
+        method = get_auth_method(candidate.code)
+        if method is None:
+            continue
+        if method.permission is not None and not request_user.has_perm(method.permission):
+            continue
+        return method
 
-    request.session[VERIFIED_METHOD_CODES].append(last_method_code)
-    request.session[VERIFICATION_METHOD_CODE] = next_auth_method.code
-    return next_auth_method
+    return None
 
 
-def _enrollment_key_for_code(code: str) -> str:
-    return code
+def _highest_completed_order(request_user: User, verified_codes: list[str]) -> int:
+    if not verified_codes:
+        return -1
+    result = (
+        UserAuthMethod.objects.filter(user=request_user, code__in=verified_codes)
+        .order_by("-order")
+        .values_list("order", flat=True)
+        .first()
+    )
+    return -1 if result is None else result
 
 
-def _verification_key_for_code(code: str) -> str:
-    return code
-
-
-def _confirm_code_enrollment(method_code: str, request: HttpRequest) -> bool:
-    enrollment_for_code = request.session[_enrollment_key_for_code(method_code)]
-    method = get_auth_method(method_code)
-    if method is None:
-        raise AuthMethodNotFoundError()
-    return method.has_enrolled_for_code(method_code, enrollment_for_code, str(request.user.pk))
-
-
-def _confirm_code_verification(method_code: str, request: HttpRequest) -> bool:
-    verification_for_code = request.session[_verification_key_for_code(method_code)]
-    method = get_auth_method(method_code)
-    if method is None:
-        raise AuthMethodNotFoundError()
-    return method.has_verified_for_code(method_code, verification_for_code, str(request.user.pk))
+def _current_method(request: HttpRequest) -> AuthMethod | None:
+    """Derived, not stored: recomputed fresh from VERIFIED_METHOD_CODES
+    every call, so GET is naturally idempotent and there's no separate
+    'current step' pointer that can drift out of sync with what's
+    actually been completed."""
+    request_user = get_pending_verification_user(request)
+    verified_codes = request.session.get(VERIFIED_METHOD_CODES, [])
+    baseline = _highest_completed_order(request_user, verified_codes)
+    return _first_eligible_auth_method(request_user, after_order=baseline)
 
 
 def _navigate_user_home(request: HttpRequest) -> HttpResponseBase:
@@ -85,50 +69,37 @@ def _navigate_user_select(request: HttpRequest) -> HttpResponseBase:
     return redirect(DJANGO_AUTH_CHAIN_USER_SELECT)
 
 
-def _confirm_and_navigate(
-        request: HttpRequest,
-        is_enrolling: bool,
-) -> HttpResponseBase:
-    verified_method_codes = request.session[VERIFIED_METHOD_CODES]
+def _finish(request: HttpRequest, is_enrolling: bool) -> HttpResponseBase:
+    verified_method_codes = request.session.get(VERIFIED_METHOD_CODES, [])
     if not len(verified_method_codes):
         return _navigate_user_select(request)
 
-    for method_code in verified_method_codes:
-        if is_enrolling:
-            if not _confirm_code_enrollment(method_code, request):
-                messages.error(request, "Enrollment failed.")
-                return _navigate_user_select(request)
+    if not is_enrolling:
+        user = get_pending_verification_user(request)
+        auth_login(request, user)
 
-        else:
-            if not _confirm_code_verification(method_code, request):
-                messages.error(request, "Verification failed.")
-                return _navigate_user_select(request)
-
+    clear_pending_user(request)
     return _navigate_user_home(request)
 
 
 class Router:
-    def route_try_next_method(
-            self, request: HttpRequest,
-            is_enrolling: bool,
-            is_first_pass: bool,
-    ) -> HttpResponseBase:
-        next_method = _cycle_to_next_method(request, is_first_pass)
+    def route_try_next_method(self, request: HttpRequest, is_enrolling: bool) -> HttpResponseBase:
+        try:
+            current_method = _current_method(request)
+        except UserNotFoundError:
+            clear_pending_user(request)
+            return _navigate_user_select(request)
 
-        if next_method is None:
-            return _confirm_and_navigate(
-                    request,
-                    is_enrolling
-            )
+        if current_method is None:
+            return _finish(request, is_enrolling)
 
         if is_enrolling:
-            form_handler = next_method.get_enroll_form_handler()
-            html = next_method.enroll_html
+            form_handler = current_method.get_enroll_form_handler()
+            html = current_method.enroll_html
         else:
-            form_handler = next_method.get_verify_form_handler()
-            html = next_method.verify_html
-        
-        assert isinstance(form_handler, BaseFormHandler)
+            form_handler = current_method.get_verify_form_handler()
+            html = current_method.verify_html
+
         if request.method != "POST":
             form_handler.fill_form_from_none()
             return form_handler.render_with_form(request, html)
@@ -137,19 +108,15 @@ class Router:
         if not form_handler.is_form_valid():
             return form_handler.render_with_form(request, html)
 
-        if is_enrolling:
-            is_enrolled = next_method.enroll(form_handler)
-            if not is_enrolled:
-                return form_handler.render_with_form(request, html)
+        succeeded = (
+            current_method.enroll(request, form_handler)
+            if is_enrolling
+            else current_method.verify(request, form_handler)
+        )
+        if not succeeded:
+            return form_handler.render_with_form(request, html)
 
-        else:
-            # the actual verificationd
-            is_verified = next_method.verify(form_handler)  # sets the form field(S) error(s) if any
-            if not is_verified:
-                # we should log this or something
-                return form_handler.render_with_form(request, html)
-
-        if is_enrolling:
-            return redirect(DJANGO_AUTH_CHAIN_ENROLL)
-
-        return redirect(DJANGO_AUTH_CHAIN_VERIFY)
+        verified_codes = request.session.get(VERIFIED_METHOD_CODES, [])
+        verified_codes.append(current_method.code)
+        request.session[VERIFIED_METHOD_CODES] = verified_codes
+        return redirect(DJANGO_AUTH_CHAIN_ENROLL if is_enrolling else DJANGO_AUTH_CHAIN_VERIFY)

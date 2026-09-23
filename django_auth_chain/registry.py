@@ -2,6 +2,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from django.contrib.auth.models import User
+from django.http import HttpRequest
 
 from .base_form_handler import BaseFormHandler
 
@@ -12,12 +13,10 @@ class AuthMethod:
     label: str
     permission: str | None
     is_enrolled: Callable[[User], bool]
-    get_enroll_form_handler: Callable[[],BaseFormHandler]
-    get_verify_form_handler: Callable[[],BaseFormHandler]
-    enroll: Callable[[BaseFormHandler], bool]
-    verify: Callable[[BaseFormHandler], bool]
-    has_enrolled_for_code: Callable[[str, str, str], bool]
-    has_verified_for_code: Callable[[str, str, str], bool]
+    get_enroll_form_handler: Callable[[], BaseFormHandler]
+    get_verify_form_handler: Callable[[], BaseFormHandler]
+    enroll: Callable[[HttpRequest, BaseFormHandler], bool]
+    verify: Callable[[HttpRequest, BaseFormHandler], bool]
     enroll_html: str
     verify_html: str
 

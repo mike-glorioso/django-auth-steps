@@ -1,29 +1,13 @@
 from django.http import HttpRequest, HttpResponseBase
+from django.views import View
 
-from .base_form_handler import BaseFormHandler
-from .base_view import BaseView
-from .enroller import Enroller
+from .redirect_if_authenticated import RedirectIfAuthenticatedMixin
 from .router import Router
-from .utils import clear_pending_user
 
 
-class RoutingEnrollView(BaseView):
-    def __init__(self, enroller: Enroller, form_handler: BaseFormHandler):
-        self._router = Router()
-        self._form_handler = form_handler
-        self._enroller = enroller
+class RoutingEnrollView(RedirectIfAuthenticatedMixin, View):
+    def get(self, request: HttpRequest, *args: object, **kwargs: object) -> HttpResponseBase:
+        return Router().route_try_next_method(request, is_enrolling=True)
 
-    def dispatch(self, request: HttpRequest, method: str, html: str) -> HttpResponseBase:
-        request_method = request.method
-        if (
-                request_method is not None and
-                request_method.upper() == "POST"
-        ) or method.upper() == "POST":
-            return self._router.route_try_next_method(request, True, False)
-        clear_pending_user(request)
-        self._form_handler.fill_form_from_none()
-        return self._form_handler.render_with_form(request, html)
-
-    def atttempt_strategy(self, request: HttpRequest) -> bool:
-        return self._enroller.enroll(request, self._form_handler)
-
+    def post(self, request: HttpRequest, *args: object, **kwargs: object) -> HttpResponseBase:
+        return Router().route_try_next_method(request, is_enrolling=True)

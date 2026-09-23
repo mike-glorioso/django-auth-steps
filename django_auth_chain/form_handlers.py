@@ -6,9 +6,9 @@ from .base_form_handler import (
     BaseFormHandler,
 )
 from .forms import (
-    UserSelectForm,
     PassphraseEnrollForm,
     PassphraseVerifyForm,
+    UserSelectForm,
 )
 
 

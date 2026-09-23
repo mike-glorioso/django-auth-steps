@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head><title>Enter your passphrase</title></head>
+<body>
+  <h1>Enter your passphrase</h1>
+  {% if form.non_field_errors() %}
+    <p class="error">{{ form.non_field_errors()|join(", ") }}</p>
+  {% endif %}
+  <form method="post">
+    {{ csrf_input }}
+    <div class="field">
+      <label for="id_passphrase_verify">Passphrase</label>
+      {{ form.passphrase_verify }}
+      {% if form.passphrase_verify.errors %}<p class="error">{{ form.passphrase_verify.errors|join(", ") }}</p>{% endif %}
+    </div>
+    <button type="submit">Verify</button>
+  </form>
+</body>
+</html>
