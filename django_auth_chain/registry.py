@@ -1,7 +1,7 @@
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AbstractUser
 
 from .strategies.enroll_strategy import EnrollStrategy
 from .strategies.verify_strategy import VerifyStrategy
@@ -12,7 +12,7 @@ class AuthMethod:
     code: str
     label: str
     permission: str | None
-    is_enrolled: Callable[[User], bool]
+    is_enrolled: Callable[[AbstractUser], bool]
     enroll_strategy: EnrollStrategy
     verify_strategy: VerifyStrategy
 
@@ -20,7 +20,7 @@ class AuthMethod:
 _methods: dict[str, AuthMethod] = {}
 
 
-def register(method: AuthMethod) -> bool:
+def register_strategy(method: AuthMethod) -> bool:
     exists = _methods.get(method.code, None)
     if exists is not None:
         return False
@@ -29,9 +29,9 @@ def register(method: AuthMethod) -> bool:
     return True
 
 
-def get(code: str) -> AuthMethod | None:
+def get_strategy(code: str) -> AuthMethod | None:
     return _methods.get(code, None)
 
 
-def codes() -> Sequence[str]:
+def strategy_codes() -> Sequence[str]:
     return list(_methods)

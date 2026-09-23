@@ -1,14 +1,30 @@
-from django.contrib.auth.models import User
+from datetime import timedelta
+
+from django.contrib.auth.models import Permission, User
 from django.http import HttpRequest
 from django.test import TestCase
+from django.utils import timezone
 
 from django_auth_chain.base_form_handler import BaseFormHandler
 from django_auth_chain.constants import PENDING_VERIFICATION_USER_KEY
 from django_auth_chain.form_handlers import PassphraseVerifyFormHandler
 from django_auth_chain.models import UserAuthMethod
-from django_auth_chain.registry import AuthMethod, register
+from django_auth_chain.registry import AuthMethod
+from django_auth_chain.registry import register_strategy as register
 from django_auth_chain.strategies.enroll_strategy import EnrollStrategy
 from django_auth_chain.strategies.verify_strategy import VerifyStrategy
+
+
+def _grant_passphrase_permission(user: User) -> None:
+    # apps.py registers the built-in "passphrase" method via
+    # register_with_permission(), which gates it behind
+    # django_auth_chain.login_with_password - so any test user meant to
+    # actually reach the passphrase step needs this granted explicitly.
+    user.user_permissions.add(
+        Permission.objects.get(
+            codename="login_with_password", content_type__app_label="django_auth_chain"
+        )
+    )
 
 
 class _AlwaysFailsMixin:
@@ -64,6 +80,7 @@ class _AlwaysSucceedsVerifyStrategy(_AlwaysSucceedsMixin, VerifyStrategy):
 class OneStepPassphraseFlowTests(TestCase):
     def setUp(self):
         self.user: User = User.objects.create_user(username="mike", password="correct-horse")
+        _grant_passphrase_permission(self.user)
         UserAuthMethod.objects.create(user=self.user, code="passphrase", order=1)
 
     def test_full_flow_logs_the_user_in(self):
@@ -135,6 +152,7 @@ class TwoStepFlowTests(TestCase):
 
     def setUp(self):
         self.user: User = User.objects.create_user(username="mike", password="correct-horse")
+        _grant_passphrase_permission(self.user)
         UserAuthMethod.objects.create(user=self.user, code="passphrase", order=1)
 
     def test_first_step_alone_does_not_authenticate(self):
@@ -176,3 +194,47 @@ class TwoStepFlowTests(TestCase):
         response = self.client.post("/verify/", {"passphrase_verify": "irrelevant-for-this-step"})
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+
+class ThrottlingTests(TestCase):
+    def setUp(self):
+        self.user: User = User.objects.create_user(username="mike", password="correct-horse")
+        _grant_passphrase_permission(self.user)
+        UserAuthMethod.objects.create(user=self.user, code="passphrase", order=1)
+
+    def test_immediate_retry_after_failure_is_throttled(self):
+        self.client.post("/user-select/", {"user_identifier": "mike"})
+
+        first = self.client.post("/verify/", {"passphrase_verify": "wrong"})
+        self.assertIn(b"Incorrect passphrase", first.content)
+
+        # THROTTLE_FACTOR_SECONDS=1, so the very next attempt, made well
+        # under a second later, must be blocked - even with the right
+        # passphrase this time, since the throttle check runs before the
+        # real check
+        second = self.client.post("/verify/", {"passphrase_verify": "correct-horse"})
+        self.assertEqual(second.status_code, 200)
+        self.assertIn(b"Too many attempts", second.content)
+        self.assertFalse(second.wsgi_request.user.is_authenticated)
+
+    def test_success_after_delay_has_passed_authenticates_and_resets_throttle(self):
+        self.client.post("/user-select/", {"user_identifier": "mike"})
+        self.client.post("/verify/", {"passphrase_verify": "wrong"})
+
+        user_auth_method = UserAuthMethod.objects.get(user=self.user, code="passphrase")
+        self.assertEqual(user_auth_method.throttle_failure_count, 1)
+        self.assertIsNotNone(user_auth_method.throttle_failure_at)
+
+        # simulate the required delay having already passed, rather than
+        # actually sleeping in a test
+        UserAuthMethod.objects.filter(pk=user_auth_method.pk).update(
+            throttle_failure_at=timezone.now() - timedelta(seconds=10)
+        )
+
+        response = self.client.post("/verify/", {"passphrase_verify": "correct-horse"}, follow=True)
+        self.assertRedirects(response, "/")
+        self.assertTrue(response.wsgi_request.user.is_authenticated)
+
+        user_auth_method.refresh_from_db()
+        self.assertEqual(user_auth_method.throttle_failure_count, 0)
+        self.assertIsNone(user_auth_method.throttle_failure_at)

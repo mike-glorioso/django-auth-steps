@@ -1,10 +1,19 @@
 from django.http import HttpRequest
 
 from .base_form_handler import BaseFormHandler
-from .form_handlers import PassphraseEnrollFormHandler, PassphraseVerifyFormHandler
+from .form_handlers import (
+    PassphraseEnrollFormHandler,
+    PassphraseVerifyFormHandler,
+)
+from .registry import (
+    AuthMethod,
+    register_strategy,
+)
 from .strategies.enroll_strategy import EnrollStrategy
 from .strategies.verify_strategy import VerifyStrategy
-from .utils import get_pending_verification_user
+from .utils import (
+    get_pending_verification_user,
+)
 
 
 class PassphraseEnrollStrategy(EnrollStrategy):
@@ -36,3 +45,29 @@ class PassphraseVerifyStrategy(VerifyStrategy):
             form_handler.set_execution_state(False)
             return
         form_handler.set_execution_state(True)
+
+
+def register_without_permission():
+    register_strategy(
+        AuthMethod(
+            code="passphrase",
+            label="Passphrase",
+            permission=None,
+            is_enrolled=lambda user: user.has_usable_password(),
+            enroll_strategy=PassphraseEnrollStrategy(),
+            verify_strategy=PassphraseVerifyStrategy(),
+        )
+    )
+
+
+def register_with_permission():
+    register_strategy(
+        AuthMethod(
+            code="passphrase",
+            label="Passphrase",
+            permission="django_auth_chain.login_with_password",
+            is_enrolled=lambda user: user.has_usable_password(),
+            enroll_strategy=PassphraseEnrollStrategy(),
+            verify_strategy=PassphraseVerifyStrategy(),
+        )
+    )

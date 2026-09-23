@@ -1,5 +1,7 @@
+import math
+
 from django.contrib.auth import login as auth_login
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AbstractUser
 from django.http import HttpRequest, HttpResponseBase
 from django.shortcuts import redirect
 
@@ -12,12 +14,11 @@ from .constants import (
 )
 from .errors import UserNotFoundError
 from .models import UserAuthMethod
-from .registry import AuthMethod
-from .registry import get as get_auth_method
+from .registry import AuthMethod, get_strategy
 from .utils import clear_pending_user, get_pending_verification_user
 
 
-def _first_eligible_auth_method(request_user: User, after_order: int) -> AuthMethod | None:
+def _first_eligible_auth_method(request_user: AbstractUser, after_order: int) -> AuthMethod | None:
     """The first configured, registered, permission-eligible method with
     order strictly greater than after_order. Doesn't touch the session -
     callers decide what to do with the result."""
@@ -28,7 +29,7 @@ def _first_eligible_auth_method(request_user: User, after_order: int) -> AuthMet
     ).order_by("order")
 
     for candidate in candidates:
-        method = get_auth_method(candidate.code)
+        method = get_strategy(candidate.code)
         if method is None:
             continue
         if method.permission is not None and not request_user.has_perm(method.permission):
@@ -38,7 +39,7 @@ def _first_eligible_auth_method(request_user: User, after_order: int) -> AuthMet
     return None
 
 
-def _highest_completed_order(request_user: User, verified_codes: list[str]) -> int:
+def _highest_completed_order(request_user: AbstractUser, verified_codes: list[str]) -> int:
     if not verified_codes:
         return -1
     result = (
@@ -95,6 +96,14 @@ class Router:
             current_method.enroll_strategy if is_enrolling else current_method.verify_strategy
         )
         form_handler = strategy.get_form_handler()
+        request_user = get_pending_verification_user(request)
+        user_auth_method = UserAuthMethod.objects.get(user=request_user, code=current_method.code)
+
+        if not user_auth_method.throttle_is_allowed():
+            form_handler.fill_form_from_none()
+            wait_seconds = math.ceil(user_auth_method.throttle_delay_remaining())
+            form_handler.add_error(None, f"Too many attempts. Try again in {wait_seconds}s.")
+            return form_handler.render_with_form(request, strategy.html)
 
         if request.method != "POST":
             form_handler.fill_form_from_none()
@@ -106,7 +115,10 @@ class Router:
 
         strategy.execute(request, form_handler)
         if not form_handler.execution_state():
+            user_auth_method.throttle_record_failure()
             return form_handler.render_with_form(request, strategy.html)
+
+        user_auth_method.throttle_reset()
 
         verified_codes = request.session.get(VERIFIED_METHOD_CODES, [])
         verified_codes.append(current_method.code)

@@ -30,6 +30,14 @@ class BaseFormHandler(ABC):
     def add_error(self, field_name: str | None, error_message: str) -> None:
         if self._form is None:
             raise FormNotSetError()
+        # Form.add_error() unconditionally touches self.cleaned_data, which
+        # only exists after full_clean() has run the bound-form path (e.g.
+        # via is_form_valid()). Adding an error to a still-unbound form
+        # (fill_form_from_none(), as the throttle check does) would
+        # otherwise raise AttributeError - seed it empty, matching what
+        # full_clean() itself would set up first.
+        if not hasattr(self._form, "cleaned_data"):
+            self._form.cleaned_data = {}
         self._form.add_error(field_name, error_message)
 
     def render_with_form(self, request: HttpRequest, html: str) -> HttpResponseBase:

@@ -34,5 +34,3 @@ class PassphraseVerifyFormHandler(BaseFormHandler):
 
     def fill_form_from_request_data(self, data: MultiValueDict[str, str]) -> None:
         self.set_form(PassphraseVerifyForm(data))
-
-
