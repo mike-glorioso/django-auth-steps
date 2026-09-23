@@ -1,14 +1,12 @@
-from django.contrib.auth.models import (
-    AbstractUser,
-)
+from django.contrib.auth.models import AbstractUser
 from django.http import HttpRequest, HttpResponseBase
 from django.shortcuts import redirect
 from django.views import View
 
-from .constants import DJANGO_AUTH_CHAIN_USER_HOME
+from .constants import (
+    DJANGO_AUTH_CHAIN_USER_HOME,
+)
 
-# from .enroll_view import EnrollView
-# from .verify_view import VerifyView
 
 class DelegatingAuthenticatedRedirect(View):
     def __init__(self, delegate: View):
@@ -18,16 +16,14 @@ class DelegatingAuthenticatedRedirect(View):
         user = request.user
         return isinstance(user, AbstractUser) and user.is_authenticated
 
-    def get(self, request: HttpRequest) -> HttpResponseBase:
+    def get(self, request: HttpRequest, html: str) -> HttpResponseBase:
         if self._is_user_authenticated(request):
             return redirect(DJANGO_AUTH_CHAIN_USER_HOME)
 
-        return self._delegate.dispatch(request)
+        return self._delegate.dispatch(request, "GET", html)
 
-
-    def post(self, request: HttpRequest) -> HttpResponseBase:
+    def post(self, request: HttpRequest, html: str) -> HttpResponseBase:
         if self._is_user_authenticated(request):
             return redirect(DJANGO_AUTH_CHAIN_USER_HOME)
 
-        return self._delegate.dispatch(request, "POST")
-
+        return self._delegate.dispatch(request, "POST", html)

@@ -1,9 +1,0 @@
-from abc import abstractmethod
-
-from .base_view import BaseView
-
-
-class VerifyView(BaseView):
-    @abstractmethod
-    def verify(self) -> bool: ...
-

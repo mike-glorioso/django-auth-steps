@@ -3,8 +3,7 @@ from dataclasses import dataclass
 
 from django.contrib.auth.models import User
 
-from .enroll_view import EnrollView
-from .verify_view import VerifyView
+from .base_form_handler import BaseFormHandler
 
 
 @dataclass
@@ -13,10 +12,15 @@ class AuthMethod:
     label: str
     permission: str | None
     is_enrolled: Callable[[User], bool]
-    enroll_view: EnrollView
-    verify_view: VerifyView
-    is_enrolled_for_code: Callable[[str,str,str], bool]
-    has_verified_for_code: Callable[[str,str,str], bool]
+    get_enroll_form_handler: Callable[[],BaseFormHandler]
+    get_verify_form_handler: Callable[[],BaseFormHandler]
+    enroll: Callable[[BaseFormHandler], bool]
+    verify: Callable[[BaseFormHandler], bool]
+    has_enrolled_for_code: Callable[[str, str, str], bool]
+    has_verified_for_code: Callable[[str, str, str], bool]
+    enroll_html: str
+    verify_html: str
+
 
 _methods: dict[str, AuthMethod] = {}
 
@@ -36,9 +40,3 @@ def get(code: str) -> AuthMethod | None:
 
 def codes() -> Sequence[str]:
     return list(_methods)
-
-def is_matching_for_code(key: str, code: str, pk: str):
-    user = User.objects.filter(
-            user__pk==pk
-    ).first()
-
