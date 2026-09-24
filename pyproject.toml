@@ -8,6 +8,12 @@ dependencies = ["Django>=6.1.1"]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+exclude = ["django_auth_steps.tests", "django_auth_steps.tests.*"]
+
+[tool.setuptools.package-data]
+django_auth_steps = ["templates/*.html"]
+
 [tool.pyright]
 typeCheckingMode = "strict"
 venvPath = "."
