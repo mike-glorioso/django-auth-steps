@@ -1,14 +1,22 @@
 from datetime import timedelta
+from unittest import mock
 
 from django.contrib.auth.models import Permission, User
 from django.http import HttpRequest
 from django.test import TestCase
 from django.utils import timezone
 
+from django_auth_chain import registry
 from django_auth_chain.base_form_handler import BaseFormHandler
 from django_auth_chain.constants import PENDING_VERIFICATION_USER_KEY
 from django_auth_chain.form_handlers import PassphraseVerifyFormHandler
 from django_auth_chain.models import UserAuthMethod
+from django_auth_chain.passphrase_strategy import (
+    PassphraseEnrollStrategy,
+    PassphraseVerifyStrategy,
+    register_with_permission,
+    register_without_permission,
+)
 from django_auth_chain.registry import AuthMethod
 from django_auth_chain.registry import register_strategy as register
 from django_auth_chain.strategies.enroll_strategy import EnrollStrategy
@@ -117,6 +125,19 @@ class OneStepPassphraseFlowTests(TestCase):
 
     def test_unknown_username_gives_generic_error_and_no_session_state(self):
         response = self.client.post("/user-select/", {"user_identifier": "nobody"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Invalid username", response.content)
+        self.assertNotIn(PENDING_VERIFICATION_USER_KEY, self.client.session)
+
+    def test_existing_user_with_no_configured_methods_gets_the_same_generic_error(self):
+        # same anti-enumeration property as the unknown-username case
+        # above, for a user that genuinely exists but has zero
+        # UserAuthMethod rows at all - a real username shouldn't be
+        # distinguishable from a fake one by response content
+        User.objects.create_user(username="nobody-configured", password="x")
+
+        response = self.client.post("/user-select/", {"user_identifier": "nobody-configured"})
+
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Invalid username", response.content)
         self.assertNotIn(PENDING_VERIFICATION_USER_KEY, self.client.session)
@@ -238,3 +259,145 @@ class ThrottlingTests(TestCase):
         user_auth_method.refresh_from_db()
         self.assertEqual(user_auth_method.throttle_failure_count, 0)
         self.assertIsNone(user_auth_method.throttle_failure_at)
+
+
+class PassphraseRegistrationTests(TestCase):
+    """Unit-level: what AuthMethod register_with_permission()/
+    register_without_permission() actually build. Can't exercise these
+    against the real "passphrase" code through the module-level
+    registry as-is - apps.py's ready() already registers it there once
+    per process, and register_strategy() is first-write-wins - so each
+    test clears the registry for its own duration and restores it
+    afterward (mock.patch.dict always restores the original content on
+    exit, regardless of the clear=True given here)."""
+
+    def test_register_without_permission_registers_an_ungated_method(self):
+        with mock.patch.dict(registry._methods, {}, clear=True):  # type: ignore[reportPrivateUsage]  # deliberate: isolating the module-level registry for this test only
+            register_without_permission()
+            method = registry.get_strategy("passphrase")
+
+        assert method is not None
+        self.assertEqual(method.code, "passphrase")
+        self.assertIsNone(method.permission)
+        self.assertIsInstance(method.enroll_strategy, PassphraseEnrollStrategy)
+        self.assertIsInstance(method.verify_strategy, PassphraseVerifyStrategy)
+
+    def test_register_with_permission_registers_a_gated_method(self):
+        with mock.patch.dict(registry._methods, {}, clear=True):  # type: ignore[reportPrivateUsage]  # deliberate: isolating the module-level registry for this test only
+            register_with_permission()
+            method = registry.get_strategy("passphrase")
+
+        assert method is not None
+        self.assertEqual(method.code, "passphrase")
+        self.assertEqual(method.permission, "django_auth_chain.login_with_password")
+        self.assertIsInstance(method.enroll_strategy, PassphraseEnrollStrategy)
+        self.assertIsInstance(method.verify_strategy, PassphraseVerifyStrategy)
+
+    def test_is_enrolled_reflects_has_usable_password_for_both_variants(self):
+        user_with_password = User.objects.create_user(username="has-pw", password="x")
+        user_without_password = User.objects.create_user(username="no-pw")
+        user_without_password.set_unusable_password()
+        user_without_password.save()
+
+        for register_fn in (register_without_permission, register_with_permission):
+            with mock.patch.dict(registry._methods, {}, clear=True):  # type: ignore[reportPrivateUsage]  # deliberate: isolating the module-level registry for this test only
+                register_fn()
+                method = registry.get_strategy("passphrase")
+                assert method is not None
+                self.assertTrue(method.is_enrolled(user_with_password))
+                self.assertFalse(method.is_enrolled(user_without_password))
+
+    def test_register_strategy_is_first_write_wins(self):
+        # what makes calling register_with_permission()/
+        # register_without_permission() from apps.py's ready() safe
+        # even if ready() ever runs more than once in a process
+        with mock.patch.dict(registry._methods, {}, clear=True):  # type: ignore[reportPrivateUsage]  # deliberate: isolating the module-level registry for this test only
+            first = AuthMethod(
+                code="dup-test",
+                label="First",
+                permission=None,
+                is_enrolled=lambda user: True,
+                enroll_strategy=PassphraseEnrollStrategy(),
+                verify_strategy=PassphraseVerifyStrategy(),
+            )
+            second = AuthMethod(
+                code="dup-test",
+                label="Second",
+                permission=None,
+                is_enrolled=lambda user: True,
+                enroll_strategy=PassphraseEnrollStrategy(),
+                verify_strategy=PassphraseVerifyStrategy(),
+            )
+            self.assertTrue(register(first))
+            self.assertFalse(register(second))
+
+            method = registry.get_strategy("dup-test")
+            assert method is not None
+            self.assertEqual(method.label, "First")
+
+
+class PassphrasePermissionGateTests(TestCase):
+    """Proves the login_with_password gate that apps.py's real
+    register_with_permission() wires up for "passphrase" actually
+    blocks an ungranted user - every other test class's setUp calls
+    _grant_passphrase_permission() before expecting passphrase sign-in
+    to work; this is the negative case proving that grant is load-
+    bearing, not just cargo-culted."""
+
+    def setUp(self):
+        self.user: User = User.objects.create_user(username="mike", password="correct-horse")
+        # deliberately not granted login_with_password
+        UserAuthMethod.objects.create(user=self.user, code="passphrase", order=1)
+
+    def test_user_without_permission_cannot_reach_the_passphrase_step(self):
+        self.client.post("/user-select/", {"user_identifier": "mike"})
+
+        response = self.client.get("/verify/", follow=True)
+
+        self.assertRedirects(response, "/user-select/")
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+
+class UnregisteredMethodCodeTests(TestCase):
+    """What happens when a user's only configured UserAuthMethod row
+    points at a code nothing has registered in the strategy registry
+    (a typo'd code, or a project that installed django_auth_chain but
+    never actually called register_strategy() for anything).
+
+    Documents current behavior, not necessarily endorses it: router.py's
+    _first_eligible_auth_method() treats an unregistered code exactly
+    like a permission-ineligible one (silently skipped), so this ends up
+    indistinguishable from "no configured methods at all" - a silent
+    redirect to user-select, no error message, no log line. That's
+    arguably not clear enough for an operator to diagnose (a genuine
+    misconfiguration looks identical to a user who never had a method
+    assigned) - flagging as a real gap, not asserting it's fine."""
+
+    def setUp(self):
+        self.user: User = User.objects.create_user(username="mike", password="correct-horse")
+        _grant_passphrase_permission(self.user)
+        UserAuthMethod.objects.create(user=self.user, code="totally-unregistered-code", order=1)
+
+    def test_user_select_still_succeeds_since_the_row_exists_and_is_enabled(self):
+        # has_any_method only checks that an enabled UserAuthMethod row
+        # exists for this user - it doesn't check the row's code is
+        # actually registered anywhere, so this step passes even though
+        # the user can never actually complete verification. /verify/
+        # itself immediately redirects again (next test), so this can't
+        # use assertRedirects' default auto-follow-to-200 - same reason
+        # test_full_flow_logs_the_user_in checks the redirect manually.
+        response = self.client.post("/user-select/", {"user_identifier": "mike"})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "/verify/")
+
+    def test_verify_silently_bounces_back_to_user_select(self):
+        self.client.post("/user-select/", {"user_identifier": "mike"})
+
+        response = self.client.get("/verify/", follow=True)
+
+        self.assertRedirects(response, "/user-select/")
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+        # no error message anywhere in the response - indistinguishable
+        # from a plain, first-time visit to user-select
+        self.assertNotIn(b"Invalid username", response.content)
+        self.assertNotIn(b"Too many attempts", response.content)
