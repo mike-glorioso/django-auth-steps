@@ -27,7 +27,7 @@ MIDDLEWARE = [
 
 TEMPLATES: list[dict[str, Any]] = [
     {
-        "BACKEND": "django.template.backends.jinja2.Jinja2",
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [],
         "APP_DIRS": True,
         "OPTIONS": {},

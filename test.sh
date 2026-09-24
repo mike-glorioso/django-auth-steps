@@ -17,7 +17,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 # Resolved to an absolute path - a relative one confuses venv detection
 # (sys.prefix ends up spelled differently than the venv it actually is,
 # producing a harmless but noisy RuntimeWarning on every run).
-PYTHON="$(cd ../../.venv/bin && pwd)/python3"
+PYTHON="$(cd .venv/bin && pwd)/python3"
 
 echo "=== default settings (stock auth.User) ==="
 DJANGO_SETTINGS_MODULE=django_auth_chain.tests.settings \
