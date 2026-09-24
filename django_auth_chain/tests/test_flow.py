@@ -401,3 +401,19 @@ class UnregisteredMethodCodeTests(TestCase):
         # from a plain, first-time visit to user-select
         self.assertNotIn(b"Invalid username", response.content)
         self.assertNotIn(b"Too many attempts", response.content)
+
+    def test_skipping_an_unregistered_code_logs_a_warning(self):
+        # the gap this class documents: an unregistered code is
+        # currently indistinguishable from a normal, expected skip
+        # (a permission-ineligible candidate) anywhere a developer or
+        # operator could see it. Not yet true - this is the acceptance
+        # test for the fix that follows.
+        self.client.post("/user-select/", {"user_identifier": "mike"})
+
+        with self.assertLogs("django_auth_chain", level="WARNING") as logs:
+            self.client.get("/verify/")
+
+        self.assertTrue(
+            any("totally-unregistered-code" in message for message in logs.output),
+            f"expected a warning naming the unregistered code, got: {logs.output}",
+        )
