@@ -1,0 +1,6 @@
+-r requirements.txt
+django-stubs>=6.1.1
+django-stubs-ext>=6.1.1
+pyright>=1.1.414
+ruff>=0.16.8
+typing_extensions>=4.16.0
