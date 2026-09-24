@@ -5,7 +5,7 @@ from .strategies.routing_verify_view import RoutingVerifyView
 from .user_select_view import UserSelectView
 from .views import LogoutView, UserHomeView
 
-app_name = "django_auth_chain"
+app_name = "django_auth_steps"
 
 
 def register_robots_disallow(*, base_url: str = "", user_agent: str = "*"):

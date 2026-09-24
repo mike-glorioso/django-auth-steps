@@ -7,10 +7,10 @@ from django.http import HttpRequest, HttpResponseBase
 from django.shortcuts import redirect
 
 from .constants import (
-    DJANGO_AUTH_CHAIN_ENROLL,
-    DJANGO_AUTH_CHAIN_USER_HOME,
-    DJANGO_AUTH_CHAIN_USER_SELECT,
-    DJANGO_AUTH_CHAIN_VERIFY,
+    DJANGO_AUTH_STEPS_ENROLL,
+    DJANGO_AUTH_STEPS_USER_HOME,
+    DJANGO_AUTH_STEPS_USER_SELECT,
+    DJANGO_AUTH_STEPS_VERIFY,
     VERIFIED_METHOD_CODES,
 )
 from .errors import UserNotFoundError
@@ -77,11 +77,11 @@ def _current_method(request: HttpRequest) -> AuthMethod | None:
 
 
 def _navigate_user_home(request: HttpRequest) -> HttpResponseBase:
-    return redirect(DJANGO_AUTH_CHAIN_USER_HOME)
+    return redirect(DJANGO_AUTH_STEPS_USER_HOME)
 
 
 def _navigate_user_select(request: HttpRequest) -> HttpResponseBase:
-    return redirect(DJANGO_AUTH_CHAIN_USER_SELECT)
+    return redirect(DJANGO_AUTH_STEPS_USER_SELECT)
 
 
 def _finish(request: HttpRequest, is_enrolling: bool) -> HttpResponseBase:
@@ -139,4 +139,4 @@ class Router:
         verified_codes = request.session.get(VERIFIED_METHOD_CODES, [])
         verified_codes.append(current_method.code)
         request.session[VERIFIED_METHOD_CODES] = verified_codes
-        return redirect(DJANGO_AUTH_CHAIN_ENROLL if is_enrolling else DJANGO_AUTH_CHAIN_VERIFY)
+        return redirect(DJANGO_AUTH_STEPS_ENROLL if is_enrolling else DJANGO_AUTH_STEPS_VERIFY)

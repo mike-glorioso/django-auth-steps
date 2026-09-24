@@ -14,11 +14,8 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
-    "django_auth_chain.tests.custom_user_app",
-    "django_auth_chain",
+    "django_auth_steps",
 ]
-
-AUTH_USER_MODEL = "custom_user_app.EmailUser"
 
 MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -34,5 +31,5 @@ TEMPLATES: list[dict[str, Any]] = [
     },
 ]
 
-ROOT_URLCONF = "django_auth_chain.tests.urls"
+ROOT_URLCONF = "django_auth_steps.tests.urls"
 USE_TZ = True

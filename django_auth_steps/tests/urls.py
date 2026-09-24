@@ -1,5 +1,5 @@
 from django.urls import include, path
 
 urlpatterns = [
-    path("", include("django_auth_chain.urls")),
+    path("", include("django_auth_steps.urls")),
 ]

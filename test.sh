@@ -20,10 +20,10 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 PYTHON="$(cd .venv/bin && pwd)/python3"
 
 echo "=== default settings (stock auth.User) ==="
-DJANGO_SETTINGS_MODULE=django_auth_chain.tests.settings \
-    "$PYTHON" -m django test django_auth_chain.tests.test_flow -v 2
+DJANGO_SETTINGS_MODULE=django_auth_steps.tests.settings \
+    "$PYTHON" -m django test django_auth_steps.tests.test_flow -v 2
 
 echo
 echo "=== custom user model settings (swapped AUTH_USER_MODEL) ==="
-DJANGO_SETTINGS_MODULE=django_auth_chain.tests.settings_custom_user \
-    "$PYTHON" -m django test django_auth_chain.tests.test_custom_user_model -v 2
+DJANGO_SETTINGS_MODULE=django_auth_steps.tests.settings_custom_user \
+    "$PYTHON" -m django test django_auth_steps.tests.test_custom_user_model -v 2

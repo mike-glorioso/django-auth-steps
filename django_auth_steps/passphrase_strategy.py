@@ -65,7 +65,7 @@ def register_with_permission():
         AuthMethod(
             code="passphrase",
             label="Passphrase",
-            permission="django_auth_chain.login_with_password",
+            permission="django_auth_steps.login_with_password",
             is_enrolled=lambda user: user.has_usable_password(),
             enroll_strategy=PassphraseEnrollStrategy(),
             verify_strategy=PassphraseVerifyStrategy(),

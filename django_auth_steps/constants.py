@@ -1,0 +1,9 @@
+PENDING_VERIFICATION_USER_KEY = "pending_verification_user_key"
+PENDING_ENROLLMENT_USER_IDENTIFIER = "pending_enrollment_user_identifier"
+VERIFIED_METHOD_CODES = "verified_method_codes"
+
+DJANGO_AUTH_STEPS = "django_auth_steps"
+DJANGO_AUTH_STEPS_USER_HOME = f"{DJANGO_AUTH_STEPS}:user_home"
+DJANGO_AUTH_STEPS_USER_SELECT = f"{DJANGO_AUTH_STEPS}:user_select"
+DJANGO_AUTH_STEPS_ENROLL = f"{DJANGO_AUTH_STEPS}:enroll"
+DJANGO_AUTH_STEPS_VERIFY = f"{DJANGO_AUTH_STEPS}:verify"

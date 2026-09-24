@@ -1,7 +1,7 @@
 from django.http import HttpRequest, HttpResponseBase
 from django.shortcuts import redirect
 
-from .constants import DJANGO_AUTH_CHAIN_USER_HOME
+from .constants import DJANGO_AUTH_STEPS_USER_HOME
 
 
 class RedirectIfAuthenticatedMixin:
@@ -10,5 +10,5 @@ class RedirectIfAuthenticatedMixin:
 
     def dispatch(self, request: HttpRequest, *args: object, **kwargs: object) -> HttpResponseBase:
         if request.user.is_authenticated:
-            return redirect(DJANGO_AUTH_CHAIN_USER_HOME)
+            return redirect(DJANGO_AUTH_STEPS_USER_HOME)
         return super().dispatch(request, *args, **kwargs)  # type: ignore[misc]

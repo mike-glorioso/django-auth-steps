@@ -7,7 +7,7 @@ from django.shortcuts import redirect
 from django.views import View
 
 from .constants import (
-    DJANGO_AUTH_CHAIN_VERIFY,
+    DJANGO_AUTH_STEPS_VERIFY,
     PENDING_VERIFICATION_USER_KEY,
     VERIFIED_METHOD_CODES,
 )
@@ -56,4 +56,4 @@ class UserSelectView(RedirectIfAuthenticatedMixin, View):
 
         request.session[PENDING_VERIFICATION_USER_KEY] = user.pk
         request.session[VERIFIED_METHOD_CODES] = []
-        return redirect(DJANGO_AUTH_CHAIN_VERIFY)
+        return redirect(DJANGO_AUTH_STEPS_VERIFY)

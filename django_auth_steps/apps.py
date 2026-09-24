@@ -1,8 +1,8 @@
 from django.apps import AppConfig
 
 
-class DjangoAuthChainConfig(AppConfig):
-    name = "django_auth_chain"
+class DjangoAuthStepsConfig(AppConfig):
+    name = "django_auth_steps"
 
     def ready(self) -> None:
         from .passphrase_strategy import (

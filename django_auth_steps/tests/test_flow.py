@@ -6,31 +6,31 @@ from django.http import HttpRequest
 from django.test import TestCase
 from django.utils import timezone
 
-from django_auth_chain import registry
-from django_auth_chain.base_form_handler import BaseFormHandler
-from django_auth_chain.constants import PENDING_VERIFICATION_USER_KEY
-from django_auth_chain.form_handlers import PassphraseVerifyFormHandler
-from django_auth_chain.models import UserAuthMethod
-from django_auth_chain.passphrase_strategy import (
+from django_auth_steps import registry
+from django_auth_steps.base_form_handler import BaseFormHandler
+from django_auth_steps.constants import PENDING_VERIFICATION_USER_KEY
+from django_auth_steps.form_handlers import PassphraseVerifyFormHandler
+from django_auth_steps.models import UserAuthMethod
+from django_auth_steps.passphrase_strategy import (
     PassphraseEnrollStrategy,
     PassphraseVerifyStrategy,
     register_with_permission,
     register_without_permission,
 )
-from django_auth_chain.registry import AuthMethod
-from django_auth_chain.registry import register_strategy as register
-from django_auth_chain.strategies.enroll_strategy import EnrollStrategy
-from django_auth_chain.strategies.verify_strategy import VerifyStrategy
+from django_auth_steps.registry import AuthMethod
+from django_auth_steps.registry import register_strategy as register
+from django_auth_steps.strategies.enroll_strategy import EnrollStrategy
+from django_auth_steps.strategies.verify_strategy import VerifyStrategy
 
 
 def _grant_passphrase_permission(user: User) -> None:
     # apps.py registers the built-in "passphrase" method via
     # register_with_permission(), which gates it behind
-    # django_auth_chain.login_with_password - so any test user meant to
+    # django_auth_steps.login_with_password - so any test user meant to
     # actually reach the passphrase step needs this granted explicitly.
     user.user_permissions.add(
         Permission.objects.get(
-            codename="login_with_password", content_type__app_label="django_auth_chain"
+            codename="login_with_password", content_type__app_label="django_auth_steps"
         )
     )
 
@@ -289,7 +289,7 @@ class PassphraseRegistrationTests(TestCase):
 
         assert method is not None
         self.assertEqual(method.code, "passphrase")
-        self.assertEqual(method.permission, "django_auth_chain.login_with_password")
+        self.assertEqual(method.permission, "django_auth_steps.login_with_password")
         self.assertIsInstance(method.enroll_strategy, PassphraseEnrollStrategy)
         self.assertIsInstance(method.verify_strategy, PassphraseVerifyStrategy)
 
@@ -361,7 +361,7 @@ class PassphrasePermissionGateTests(TestCase):
 class UnregisteredMethodCodeTests(TestCase):
     """What happens when a user's only configured UserAuthMethod row
     points at a code nothing has registered in the strategy registry
-    (a typo'd code, or a project that installed django_auth_chain but
+    (a typo'd code, or a project that installed django_auth_steps but
     never actually called register_strategy() for anything).
 
     Documents current behavior, not necessarily endorses it: router.py's
@@ -410,7 +410,7 @@ class UnregisteredMethodCodeTests(TestCase):
         # test for the fix that follows.
         self.client.post("/user-select/", {"user_identifier": "mike"})
 
-        with self.assertLogs("django_auth_chain", level="WARNING") as logs:
+        with self.assertLogs("django_auth_steps", level="WARNING") as logs:
             self.client.get("/verify/")
 
         self.assertTrue(
