@@ -1,3 +1,4 @@
+import logging
 import math
 
 from django.contrib.auth import login as auth_login
@@ -17,6 +18,8 @@ from .models import UserAuthMethod
 from .registry import AuthMethod, get_strategy
 from .utils import clear_pending_user, get_pending_verification_user
 
+logger = logging.getLogger(__name__)
+
 
 def _first_eligible_auth_method(request_user: AbstractUser, after_order: int) -> AuthMethod | None:
     """The first configured, registered, permission-eligible method with
@@ -31,6 +34,19 @@ def _first_eligible_auth_method(request_user: AbstractUser, after_order: int) ->
     for candidate in candidates:
         method = get_strategy(candidate.code)
         if method is None:
+            # Distinct from the permission-ineligible skip below: that
+            # one is normal, expected behavior. This one is always a
+            # misconfiguration (a typo'd code, or nothing ever called
+            # register_strategy() for it) - left silent, it's
+            # indistinguishable from "this user has no methods at all"
+            # anywhere a developer or operator could see it.
+            logger.warning(
+                "UserAuthMethod code %r (user pk=%r) has no strategy registered - "
+                "check register_strategy()/register_with_permission()/"
+                "register_without_permission() was called for it.",
+                candidate.code,
+                request_user.pk,
+            )
             continue
         if method.permission is not None and not request_user.has_perm(method.permission):
             continue
