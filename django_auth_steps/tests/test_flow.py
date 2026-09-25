@@ -466,3 +466,66 @@ class UnregisteredMethodCodeTests(TestCase):
             any("totally-unregistered-code" in message for message in logs.output),
             f"expected a warning naming the unregistered code, got: {logs.output}",
         )
+
+
+class _RecordsOnDisplayVerifyStrategy(_AlwaysSucceedsMixin, VerifyStrategy):
+    def __init__(self) -> None:
+        self.on_display_calls = 0
+
+    def on_display(self, request: HttpRequest, form_handler: BaseFormHandler) -> None:
+        self.on_display_calls += 1
+
+
+class OnDisplayHookTests(TestCase):
+    """on_display() exists so a strategy like email-OTP can send a code
+    before its form is shown - proving it fires exactly where it should
+    (a genuine GET) and nowhere else (throttled, or POST) is what makes
+    that safe to build on."""
+
+    CODE = "test-on-display"
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.strategy = _RecordsOnDisplayVerifyStrategy()
+        register(
+            AuthMethod(
+                code=cls.CODE,
+                label="Test on_display",
+                permission=None,
+                is_enrolled=lambda user: True,
+                enroll_strategy=_AlwaysSucceedsEnrollStrategy(),
+                verify_strategy=cls.strategy,
+            )
+        )
+
+    def setUp(self):
+        self.strategy.on_display_calls = 0
+        self.user: User = User.objects.create_user(username="mike", password="x")
+        UserAuthMethod.objects.create(user=self.user, code=self.CODE, order=1)
+        self.client.post("/user-select/", {"user_identifier": "mike"})
+
+    def test_on_display_fires_on_a_genuine_get(self):
+        self.client.get("/verify/")
+        self.assertEqual(self.strategy.on_display_calls, 1)
+
+    def test_on_display_does_not_fire_on_post(self):
+        self.client.post("/verify/", {})
+        self.assertEqual(self.strategy.on_display_calls, 0)
+
+    def test_on_display_does_not_fire_while_throttled(self):
+        user_auth_method = UserAuthMethod.objects.get(user=self.user, code=self.CODE)
+        user_auth_method.throttle_record_failure()
+
+        self.client.get("/verify/")
+
+        self.assertEqual(self.strategy.on_display_calls, 0)
+
+    def test_passphrase_default_on_display_is_a_no_op(self):
+        # PassphraseVerifyStrategy doesn't override on_display - this
+        # just proves the base no-op doesn't blow up or do anything
+        # observable, so passphrase (and any other pre-existing
+        # strategy) is unaffected by this hook's addition.
+        strategy = PassphraseVerifyStrategy()
+        request = HttpRequest()
+        self.assertIsNone(strategy.on_display(request, PassphraseVerifyFormHandler()))

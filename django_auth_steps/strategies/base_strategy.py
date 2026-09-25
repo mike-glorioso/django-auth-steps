@@ -22,3 +22,10 @@ class BaseStrategy(ABC):
 
     @abstractmethod
     def execute(self, request: HttpRequest, form_handler: BaseFormHandler) -> None: ...
+
+    def on_display(self, request: HttpRequest, form_handler: BaseFormHandler) -> None:
+        """Called once, only on a genuine "show a fresh form" GET (never
+        on the throttled-block path, never on POST). Default no-op;
+        override for a side effect that has to happen before the form
+        is shown, like sending an out-of-band code."""
+        return None

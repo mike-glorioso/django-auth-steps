@@ -123,6 +123,7 @@ class Router:
 
         if request.method != "POST":
             form_handler.fill_form_from_none()
+            strategy.on_display(request, form_handler)
             return form_handler.render_with_form(request, strategy.html)
 
         form_handler.fill_form_from_request_data(request.POST)
