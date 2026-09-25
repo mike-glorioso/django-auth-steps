@@ -1,8 +1,22 @@
 [project]
 name = "django_auth_steps"
 version = "0.1.1"
+description = "A pluggable, multi-step authentication orchestrator for Django."
+readme = "README.md"
 requires-python = ">=3.14.4"
+license = {text = "BSD-3-Clause"}
+authors = [{name = "Michael Glorioso", email = "michael.glorioso@glotronic.net"}]
 dependencies = ["Django>=6.1.1"]
+classifiers = [
+    "License :: OSI Approved :: BSD License",
+    "Framework :: Django",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/mike-glorioso/django-auth-steps"
 
 [build-system]
 requires = ["setuptools>=61"]
@@ -12,7 +26,7 @@ build-backend = "setuptools.build_meta"
 exclude = ["django_auth_steps.tests", "django_auth_steps.tests.*"]
 
 [tool.setuptools.package-data]
-django_auth_steps = ["templates/*.html"]
+django_auth_steps = ["templates/*.html", "py.typed"]
 
 [tool.pyright]
 typeCheckingMode = "strict"
