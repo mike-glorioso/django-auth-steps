@@ -143,6 +143,55 @@ class OneStepPassphraseFlowTests(TestCase):
         self.assertNotIn(PENDING_VERIFICATION_USER_KEY, self.client.session)
 
 
+class OneStepPassphraseEnrollFlowTests(TestCase):
+    def setUp(self):
+        self.user: User = User.objects.create_user(username="mike", password="old-horse")
+        _grant_passphrase_permission(self.user)
+        UserAuthMethod.objects.create(user=self.user, code="passphrase", order=1)
+        self.client.post("/user-select/", {"user_identifier": "mike"})
+
+    def test_full_flow_sets_the_new_passphrase(self):
+        get_enroll = self.client.get("/enroll/")
+        self.assertEqual(get_enroll.status_code, 200)
+
+        post_enroll = self.client.post(
+            "/enroll/",
+            {
+                "passphrase_entry": "correct-horse-battery-staple",
+                "passphrase_match": "correct-horse-battery-staple",
+            },
+        )
+        self.assertEqual(post_enroll.status_code, 302)
+
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("correct-horse-battery-staple"))
+        self.assertFalse(self.user.check_password("old-horse"))
+
+    def test_mismatched_passphrases_are_rejected_and_nothing_changes(self):
+        response = self.client.post(
+            "/enroll/",
+            {
+                "passphrase_entry": "correct-horse-battery-staple",
+                "passphrase_match": "different-value-entirely",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"don&#x27;t match", response.content)
+
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("old-horse"))
+
+    def test_weak_passphrase_is_rejected_by_django_validators(self):
+        response = self.client.post(
+            "/enroll/",
+            {"passphrase_entry": "12345678", "passphrase_match": "12345678"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("old-horse"))
+
+
 class TwoStepFlowTests(TestCase):
     DENY_SECOND_STEP_CODE = "test-second-step-deny"
     ALLOW_SECOND_STEP_CODE = "test-second-step-allow"

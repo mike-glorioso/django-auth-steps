@@ -33,3 +33,9 @@ TEMPLATES: list[dict[str, Any]] = [
 
 ROOT_URLCONF = "django_auth_steps.tests.urls"
 USE_TZ = True
+
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]

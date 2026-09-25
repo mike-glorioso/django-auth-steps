@@ -25,7 +25,12 @@ class PassphraseEnrollStrategy(EnrollStrategy):
         return PassphraseEnrollFormHandler()
 
     def execute(self, request: HttpRequest, form_handler: BaseFormHandler) -> None:
-        raise NotImplementedError("Self-service passphrase enrollment isn't built yet.")
+        form = form_handler.get_form()
+        passphrase = form.cleaned_data["passphrase_entry"]
+        user = get_pending_verification_user(request)
+        user.set_password(passphrase)
+        user.save(update_fields=["password"])
+        form_handler.set_execution_state(True)
 
 
 class PassphraseVerifyStrategy(VerifyStrategy):

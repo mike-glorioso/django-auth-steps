@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head><title>Set your passphrase</title></head>
+<body>
+  <h1>Set your passphrase</h1>
+  {% if non_field_errors %}
+    <div class="error">{{ non_field_errors }}</div>
+  {% endif %}
+  <form method="post">
+    {{ csrf_input }}
+    <div class="field">
+      <label for="id_passphrase_entry">New passphrase</label>
+      {{ form.passphrase_entry }}
+      {% if form.passphrase_entry.errors %}<div class="error">{{ form.passphrase_entry.errors }}</div>{% endif %}
+    </div>
+    <div class="field">
+      <label for="id_passphrase_match">Confirm passphrase</label>
+      {{ form.passphrase_match }}
+      {% if form.passphrase_match.errors %}<div class="error">{{ form.passphrase_match.errors }}</div>{% endif %}
+    </div>
+    <button type="submit">Set passphrase</button>
+  </form>
+</body>
+</html>

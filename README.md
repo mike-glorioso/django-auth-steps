@@ -50,10 +50,10 @@ methods fail clearly rather than silently), and rate-limiting.
 
 ## Status
 
-The built-in `passphrase` method only supports *verifying* an existing
-password — self-service enrollment isn't built yet
-(`PassphraseEnrollStrategy.execute` raises `NotImplementedError`
-deliberately, rather than pretending to work).
+The built-in `passphrase` method supports both verifying an existing
+password and self-service enrollment (`PassphraseEnrollStrategy` sets a
+new password via Django's own `validate_password()` and confirmation
+matching).
 
 Extracted from an internal project (glotronic.net), with full commit
 history preserved via `git subtree split`.
