@@ -1,6 +1,6 @@
 [project]
 name = "django_auth_steps"
-version = "0.1.1"
+version = "1.0.0"
 description = "A pluggable, multi-step authentication orchestrator for Django."
 readme = "README.md"
 requires-python = ">=3.14.4"
